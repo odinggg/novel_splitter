@@ -2,6 +2,8 @@ import os
 import re
 import logging
 import json
+import uuid
+from datetime import datetime
 from typing import List, Tuple, TypedDict, Optional, Annotated
 from tqdm import tqdm
 from langgraph.graph import StateGraph, END
@@ -21,6 +23,8 @@ class GraphState(TypedDict):
     confirmed_chapters: List[Tuple[int, str]]
     user_confirmed: bool
     auto_confirm: bool
+    task_id: str  # Added for unique run identification
+    start_time: str # Added to track execution time
 
 
 class NovelSplitter:
@@ -151,34 +155,79 @@ class NovelSplitter:
             return {**state, "user_confirmed": False}
 
     def _node_execute_split(self, state: GraphState):
-        """Node: Executes the file splitting operation based on the confirmed chapter list."""
-        self.logger.info("Node [4]: Executing file split...")
-        filepath, chapters, output_dir = state["filepath"], state["confirmed_chapters"], state["output_dir"]
+        """
+        Node: Executes the file splitting and creates a metadata file.
+        """
+        self.logger.info("Node [4]: Executing file split and metadata generation...")
+        filepath = state["filepath"]
+        chapters = state["confirmed_chapters"]
+        output_dir = state["output_dir"]
+        task_id = state["task_id"]
+        start_time = state["start_time"]
+
+        # Define new directory structure
+        split_data_path = os.path.join(output_dir, "splitdata", task_id)
+        metadata_path = os.path.join(output_dir, "metadata")
 
         try:
+            ensure_dir(split_data_path)
+            ensure_dir(metadata_path)
+
             with open(filepath, 'r', encoding='utf-8') as f:
                 all_lines = f.readlines()
         except Exception:
-            self.logger.error(f"Failed to read the source file '{filepath}' during split execution.", exc_info=True)
+            self.logger.error(f"Failed to read source file or create directories.", exc_info=True)
             return state
 
-        ensure_dir(output_dir)
+        # Prepare lists for metadata
+        relative_paths = []
+        chapter_titles = []
+
+        # Define chapter indices before the loop to avoid NameError
         chapter_indices = [chap[0] for chap in chapters]
 
         for i, (line_num, title) in enumerate(chapters):
             start_line = line_num
             end_line = chapter_indices[i + 1] if i + 1 < len(chapters) else len(all_lines)
             content = all_lines[start_line:end_line]
-            filename = f"{i+1:04d}-{clean_filename(title)}.txt"
-            output_path = os.path.join(output_dir, filename)
+
+            # Use a simple sequential filename
+            filename = f"{i+1}.txt"
+            full_path = os.path.join(split_data_path, filename)
+
+            # Define relative path from metadata file to split data file
+            relative_path = os.path.join("..", "splitdata", task_id, filename)
 
             try:
-                with open(output_path, 'w', encoding='utf-8') as out_f:
+                with open(full_path, 'w', encoding='utf-8') as out_f:
                     out_f.writelines(content)
+                relative_paths.append(relative_path.replace("\\", "/")) # Use forward slashes for consistency
+                chapter_titles.append(title)
             except Exception:
-                self.logger.error(f"Failed to write chapter file '{output_path}'.", exc_info=True)
+                self.logger.error(f"Failed to write chapter file '{full_path}'.", exc_info=True)
 
-        self.logger.info(f"[bold green]Split complete! All chapter files have been saved to '{output_dir}'.[/bold green]")
+        # Create metadata content
+        end_time = datetime.now().isoformat()
+        metadata_content = {
+            "source_filename": os.path.basename(filepath),
+            "split_files": relative_paths,
+            "chapter_titles": chapter_titles,
+            "task_id": task_id,
+            "start_time": start_time,
+            "end_time": end_time,
+        }
+
+        # Write metadata file
+        metadata_filename = f"{task_id}-metadata.json"
+        metadata_filepath = os.path.join(metadata_path, metadata_filename)
+        try:
+            with open(metadata_filepath, 'w', encoding='utf-8') as meta_f:
+                json.dump(metadata_content, meta_f, ensure_ascii=False, indent=4)
+            self.logger.info(f"Metadata file created at [bold cyan]{metadata_filepath}[/bold cyan]")
+        except Exception:
+            self.logger.error(f"Failed to write metadata file '{metadata_filepath}'.", exc_info=True)
+
+        self.logger.info(f"[bold green]Split complete! Data in '{split_data_path}', Metadata in '{metadata_path}'.[/bold green]")
         return state
 
     # --- LangGraph Edges (Conditional Routing) ---
@@ -209,8 +258,8 @@ class NovelSplitter:
             return
 
         if output_dir is None:
-            base_name = os.path.splitext(os.path.basename(filepath))[0]
-            output_dir = os.path.join(os.path.dirname(filepath), f"{base_name}_chapters")
+            # Default output to a 'results' folder in the current working directory.
+            output_dir = os.path.join(os.getcwd(), "results")
 
         # Define the workflow graph
         workflow = StateGraph(GraphState)
@@ -246,7 +295,9 @@ class NovelSplitter:
             "candidates": [],
             "confirmed_chapters": [],
             "user_confirmed": False,
-            "auto_confirm": auto_confirm
+            "auto_confirm": auto_confirm,
+            "task_id": str(uuid.uuid4()),
+            "start_time": datetime.now().isoformat()
         }
 
         try:
