@@ -11,6 +11,7 @@ from langgraph.graph import StateGraph, END
 from .llm_interface import create_llm_and_parser
 from .utils import clean_filename, ensure_dir, setup_logger
 from langchain_core.prompts import ChatPromptTemplate
+import config
 
 
 class GraphState(TypedDict):
@@ -166,8 +167,8 @@ class NovelSplitter:
         start_time = state["start_time"]
 
         # Define new directory structure
-        split_data_path = os.path.join(output_dir, "splitdata", task_id)
-        metadata_path = os.path.join(output_dir, "metadata")
+        split_data_path = os.path.join(config.SPLITDATA_DIR, task_id)
+        metadata_path = config.METADATA_DIR
 
         try:
             ensure_dir(split_data_path)
@@ -259,7 +260,7 @@ class NovelSplitter:
 
         if output_dir is None:
             # Default output to a 'results' folder in the current working directory.
-            output_dir = os.path.join(os.getcwd(), "results")
+            output_dir = config.RESULTS_DIR
 
         # Define the workflow graph
         workflow = StateGraph(GraphState)
