@@ -23,4 +23,4 @@ RUN uv sync --locked
 
 # 使用 uv run 来执行 uvicorn 启动应用
 # 这是在 uv 管理的环境中运行命令的标准方式
-CMD ["uv", "run", "novel-splitte"]
+CMD ["uv", "run", "novel-splitter"]
