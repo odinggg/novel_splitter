@@ -11,7 +11,7 @@ from langgraph.graph import StateGraph, END
 from .llm_interface import create_llm_and_parser
 from .utils import clean_filename, ensure_dir, setup_logger
 from langchain_core.prompts import ChatPromptTemplate
-import config
+from . import config
 
 
 class GraphState(TypedDict):

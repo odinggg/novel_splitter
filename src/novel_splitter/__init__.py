@@ -5,12 +5,14 @@ with a human-in-the-loop confirmation step.
 """
 __version__ = "0.1.0"
 
-from .core import NovelSplitter
-from . import config
 import os
 
+from . import config
+from .core import NovelSplitter
+
+
 def main() -> None:
-    api_key = config.LLM_BASE_URL
+    api_key = config.LLM_API_KEY
     base_url = config.LLM_BASE_URL
 
     if not api_key:
@@ -27,10 +29,15 @@ def main() -> None:
     # 指定你的小说文件路径
     novel_path = config.BOOKS_DIR
     # 2. 检查路径是否存在
-    if not os.path.isdir(novel_path):
-        print(f"错误：目录 '{novel_path}' 不存在或不是一个目录。")
+    if not os.access(novel_path, os.R_OK):
+        print(f"错误：目录 '{novel_path}' 不可读。请检查权限。")
         return
-    else:
+    elif os.path.isfile(novel_path):
+        try:
+            splitter.run(filepath=str(novel_path), auto_confirm=True)
+        except Exception as e:
+            print(f"    处理文件 {novel_path} 时发生错误: {e}")
+    elif os.path.isdir(novel_path):
         print(f"开始递归遍历目录: {novel_path}")
         found_files_count = 0
         # 3. 使用 os.walk() 递归遍历
@@ -50,5 +57,6 @@ def main() -> None:
 
         if found_files_count == 0:
             print("未找到任何 .txt 文件。")
-
         print(f"\n所有文件处理完毕 (共处理 {found_files_count} 个文件)。")
+    else:
+        print(f"错误：路径 '{novel_path}' 既不是文件也不是目录。请检查路径。")
