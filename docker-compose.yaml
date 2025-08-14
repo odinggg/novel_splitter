@@ -1,9 +1,9 @@
 services:
-  text2speech:
+  novel-splitter:
 #    image: ${MY_IMAGE}
     build:
         context: .
         dockerfile: Dockerfile
-    container_name: text2speech
+    container_name: novel-splitter
     volumes:
       - ./results:/app/results
