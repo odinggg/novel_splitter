@@ -7,3 +7,5 @@ services:
     container_name: novel-splitter
     volumes:
       - ./results:/app/results
+    env_file:
+      - .env
